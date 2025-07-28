@@ -4,6 +4,7 @@ import csv
 
 import torch
 import torch.nn.functional as F
+import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from sklearn.metrics import f1_score, accuracy_score
 
@@ -47,8 +48,8 @@ class BertSentimentClassifier(torch.nn.Module):
                 param.requires_grad = True
 
         # Create any instance variables you need to classify the sentiment of BERT embeddings.
-        ### TODO
-        raise NotImplementedError
+        self.classifier_dense = nn.Linear(config.hidden_size, self.num_labels)
+        self.classifier_dropout = nn.Dropout(config.hidden_dropout_prob)
 
 
     def forward(self, input_ids, attention_mask):
@@ -56,9 +57,8 @@ class BertSentimentClassifier(torch.nn.Module):
         # The final BERT contextualized embedding is the hidden state of [CLS] token (the first token).
         # HINT: You should consider what is an appropriate return value given that
         # the training loop currently uses F.cross_entropy as the loss function.
-        ### TODO
-        raise NotImplementedError
-
+        bert_output = self.bert(input_ids, attention_mask)
+        return F.softmax(self.classifier_dense(self.classifier_dropout(bert_output['pooler_output'])), dim=-1)
 
 
 class SentimentDataset(Dataset):

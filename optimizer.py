@@ -1,5 +1,5 @@
 from typing import Callable, Iterable, Tuple
-import math
+import numpy as np
 
 import torch
 from torch.optim import Optimizer
@@ -40,10 +40,18 @@ class AdamW(Optimizer):
                     raise RuntimeError("Adam does not support sparse gradients, please consider SparseAdam instead")
 
                 # State should be stored in this dictionary.
+                if p not in self.state:
+                    self.state[p] = dict(momentum_1=torch.zeros_like(p.data),
+                                         momentum_2=torch.zeros_like(p.data),
+                                         time_step=0)
                 state = self.state[p]
 
                 # Access hyperparameters from the `group` dictionary.
                 alpha = group["lr"]
+                (beta_1, beta_2) = group["betas"]
+                eps = group["eps"]
+                weight_decay = group["weight_decay"]
+                correct_bias = group["correct_bias"]
 
                 # Complete the implementation of AdamW here, reading and saving
                 # your state in the `state` dictionary above.
@@ -58,9 +66,15 @@ class AdamW(Optimizer):
                 # 3. Update parameters (p.data).
                 # 4. Apply weight decay after the main gradient-based updates.
                 # Refer to the default project handout for more details.
+                if correct_bias:
+                    state["time_step"] += 1
+                    state["momentum_1"] = state["momentum_1"] * beta_1 + (1 - beta_1) * grad
+                    state["momentum_2"] = state["momentum_2"] * beta_2 + (1 - beta_2) * grad ** 2
+                    alpha_t = alpha * np.sqrt(1-beta_2 ** state["time_step"]) / (1 - beta_1 ** state["time_step"])
+                    p.data -= alpha_t * state["momentum_1"] / (np.sqrt(state["momentum_2"]) + eps)
+                else:
+                    p.data -= alpha_t * grad
 
-                ### TODO
-                raise NotImplementedError
-
+                p.data -= alpha * weight_decay * p.data
 
         return loss

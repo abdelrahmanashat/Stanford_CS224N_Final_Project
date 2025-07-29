@@ -139,13 +139,13 @@ def load_data(filename, flag='train'):
     num_labels = {}
     data = []
     if flag == 'test':
-        with open(filename, 'r') as fp:
+        with open(filename, 'r', encoding="utf8") as fp:
             for record in csv.DictReader(fp,delimiter = '\t'):
                 sent = record['sentence'].lower().strip()
                 sent_id = record['id'].lower().strip()
                 data.append((sent,sent_id))
     else:
-        with open(filename, 'r') as fp:
+        with open(filename, 'r', encoding="utf8") as fp:
             for record in csv.DictReader(fp,delimiter = '\t'):
                 sent = record['sentence'].lower().strip()
                 sent_id = record['id'].lower().strip()
@@ -298,7 +298,7 @@ def train(args):
 def test(args):
     with torch.no_grad():
         device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
-        saved = torch.load(args.filepath)
+        saved = torch.load(args.filepath, weights_only=False)
         config = saved['model_config']
         model = BertSentimentClassifier(config)
         model.load_state_dict(saved['model'])

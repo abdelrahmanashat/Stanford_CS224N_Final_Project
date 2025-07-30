@@ -71,7 +71,7 @@ class AdamW(Optimizer):
                     state["momentum_1"] = state["momentum_1"] * beta_1 + (1 - beta_1) * grad
                     state["momentum_2"] = state["momentum_2"] * beta_2 + (1 - beta_2) * grad ** 2
                     alpha_t = alpha * np.sqrt(1-beta_2 ** state["time_step"]) / (1 - beta_1 ** state["time_step"])
-                    p.data -= alpha_t * state["momentum_1"] / (np.sqrt(state["momentum_2"]) + eps)
+                    p.data -= alpha_t * state["momentum_1"] / (torch.sqrt(state["momentum_2"]) + eps)
                 else:
                     p.data -= alpha_t * grad
 

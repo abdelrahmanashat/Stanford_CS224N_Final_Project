@@ -32,6 +32,8 @@ from datasets import (
     load_multitask_data
 )
 
+from sklearn.metrics import f1_score, accuracy_score
+
 from evaluation import model_eval_sst, model_eval_multitask, model_eval_test_multitask, model_eval_para, model_eval_similarity
 
 
@@ -151,9 +153,9 @@ def train_multitask(args):
     in datasets.py to load in examples from the Quora and SemEval datasets.
     '''
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
-    # Create the data and its corresponding datasets and dataloader.
-    sst_train_data, num_labels,para_train_data, sts_train_data = load_multitask_data(args.sst_train,args.para_train,args.sts_train, split ='train')
-    sst_dev_data, num_labels,para_dev_data, sts_dev_data = load_multitask_data(args.sst_dev,args.para_dev,args.sts_dev, split ='train')
+    # Create the sst data and its corresponding datasets and dataloader.
+    sst_train_data, num_labels, _, _ = load_multitask_data(args.sst_train,args.para_train,args.sts_train, split ='train')
+    sst_dev_data, num_labels, _, _ = load_multitask_data(args.sst_dev,args.para_dev,args.sts_dev, split ='train')
 
     # Init model.
     config = {'hidden_dropout_prob': args.hidden_dropout_prob,
@@ -185,6 +187,8 @@ def train_multitask(args):
         model.train()
         train_loss = 0
         num_batches = 0
+        y_true = []
+        y_pred = []
         for batch in tqdm(sst_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
             b_ids, b_mask, b_labels = (batch['token_ids'],
                                        batch['attention_mask'], batch['labels'])
@@ -203,16 +207,30 @@ def train_multitask(args):
             train_loss += loss.item()
             num_batches += 1
 
-        train_loss = train_loss / (num_batches)
+            y_true.extend(b_labels.detach().cpu().flatten())
+            y_pred.extend(np.argmax(logits.detach().cpu().numpy(), axis=1).flatten())
 
-        train_acc, train_f1, *_ = model_eval_sst(sst_train_dataloader, model, device)
+        train_loss = train_loss / num_batches
+
+        train_f1 = f1_score(y_true, y_pred, average='macro')
+        train_acc = accuracy_score(y_true, y_pred)
+
+        #train_acc, train_f1, *_ = model_eval_sst(sst_train_dataloader, model, device)
         dev_acc, dev_f1, *_ = model_eval_sst(sst_dev_dataloader, model, device)
+
+        print(f"Epoch {epoch}: train loss :: {train_loss :.3f},"
+              f" train acc :: {train_acc :.3f}, train f1 :: {train_f1 :.3f},"
+              f" dev acc :: {dev_acc :.3f}, dev_f1 :: {dev_f1 :.3f}")
 
         if dev_acc > best_dev_acc:
             best_dev_acc = dev_acc
             save_model(model, optimizer, args, config, args.filepath)
 
-        print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
+    best_dev_acc = 0
+
+    # Create the para data and its corresponding datasets and dataloader.
+    _, _, para_train_data, _ = load_multitask_data(args.sst_train, args.para_train, args.sts_train, split='train')
+    _, _, para_dev_data, _ = load_multitask_data(args.sst_dev, args.para_dev, args.sts_dev, split='train')
 
     # Wrap para data
     para_train_data = SentencePairDataset(para_train_data, args)
@@ -228,6 +246,8 @@ def train_multitask(args):
         model.train()
         train_loss = 0
         num_batches = 0
+        y_true = []
+        y_pred = []
         for batch in tqdm(para_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
             b_ids_1, b_mask_1, b_ids_2, b_mask_2, b_labels = \
                 (batch['token_ids_1'],
@@ -252,18 +272,32 @@ def train_multitask(args):
             train_loss += loss.item()
             num_batches += 1
 
-        train_loss = train_loss / (num_batches)
+            y_true.extend(b_labels.detach().cpu().flatten())
+            y_pred.extend(np.argmax(logits.detach().cpu().numpy(), axis=1).flatten())
 
-        train_acc, train_f1, *_ = model_eval_para(para_train_dataloader, model, device)
+        train_loss = train_loss / num_batches
+
+        train_f1 = f1_score(y_true, y_pred, average='macro')
+        train_acc = accuracy_score(y_true, y_pred)
+
+        #train_acc, train_f1, *_ = model_eval_para(para_train_dataloader, model, device)
         dev_acc, dev_f1, *_ = model_eval_para(para_dev_dataloader, model, device)
+
+        print(f"Epoch {epoch}: train loss :: {train_loss :.3f},"
+              f" train acc :: {train_acc :.3f}, train f1 :: {train_f1 :.3f},"
+              f" dev acc :: {dev_acc :.3f}, dev_f1 :: {dev_f1 :.3f}")
 
         if dev_acc > best_dev_acc:
             best_dev_acc = dev_acc
             save_model(model, optimizer, args, config, args.filepath)
 
-        print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
+    best_dev_acc = 0
 
-    # Wrap para data
+    # Create the sts data and its corresponding datasets and dataloader.
+    _, _, _, sts_train_data = load_multitask_data(args.sst_train, args.para_train, args.sts_train, split='train')
+    _, _, _, sts_dev_data = load_multitask_data(args.sst_dev, args.para_dev, args.sts_dev, split='train')
+
+    # Wrap sts data
     sts_train_data = SentencePairDataset(sts_train_data, args)
     sts_dev_data = SentencePairDataset(sts_dev_data, args)
     sts_train_dataloader = DataLoader(sts_train_data, shuffle=True, batch_size=args.batch_size,
@@ -277,6 +311,8 @@ def train_multitask(args):
         model.train()
         train_loss = 0
         num_batches = 0
+        y_true = []
+        y_pred = []
         for batch in tqdm(sts_train_dataloader, desc=f'train-{epoch}', disable=TQDM_DISABLE):
             b_ids_1, b_mask_1, b_ids_2, b_mask_2, b_labels = \
                 (batch['token_ids_1'],
@@ -301,16 +337,24 @@ def train_multitask(args):
             train_loss += loss.item()
             num_batches += 1
 
-        train_loss = train_loss / (num_batches)
+            y_true.extend(b_labels.detach().cpu().flatten())
+            y_pred.extend(np.argmax(logits.detach().cpu().numpy(), axis=1).flatten())
 
-        train_acc, train_f1, *_ = model_eval_similarity(sts_train_dataloader, model, device)
+        train_loss = train_loss / num_batches
+
+        train_f1 = f1_score(y_true, y_pred, average='macro')
+        train_acc = accuracy_score(y_true, y_pred)
+
+        #train_acc, train_f1, *_ = model_eval_similarity(sts_train_dataloader, model, device)
         dev_acc, dev_f1, *_ = model_eval_similarity(sts_dev_dataloader, model, device)
+
+        print(f"Epoch {epoch}: train loss :: {train_loss :.3f},"
+              f" train acc :: {train_acc :.3f}, train f1 :: {train_f1 :.3f},"
+              f" dev acc :: {dev_acc :.3f}, dev_f1 :: {dev_f1 :.3f}")
 
         if dev_acc > best_dev_acc:
             best_dev_acc = dev_acc
             save_model(model, optimizer, args, config, args.filepath)
-
-        print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
 
 
 def test_multitask(args):
